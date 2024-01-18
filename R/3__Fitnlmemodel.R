@@ -1,4 +1,30 @@
 # STEP 3 - Fit a Weibull function using a nonlinear-mixed fixed effect model to the 1-NN distribution curve
+# STEP 2 - Script to estimate initial Weibull parameters for the 1-NN distribution
+
+#' STEP 1 
+#' 
+#' Takes as an input the spatial coordinates of mIF data and computes the 
+#' 1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' 
+#' Output is saved as a tab-delimited file (specified by output_file)
+#'
+#' @param spatial_data input spatial dataset, with at least columns: 
+#'        "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
+#' @param spatial_areas input tissue areas for each sample with at least columns: 
+#'        "sample_id', "Total.Area"
+#' @param output_file output file name 
+#' @param initial_parameters file with initial parameters for the non-linear mixed effect model,
+#'        with at least the columns:
+#'        "phenotype_combo", "a", "b"
+#'        (phenotype_combo = spatial relationship; a = shape parameter; b = scale parameter)
+#' @examples
+#' # Example code
+#' Rscript --vanilla ./R/3__Fitnlmemodel.R results/step1_1nn_output.tsv results/step2_weibull_initial_params.tsv  ./results/step3_fittednlme_weibull_params.tsv
+#' # TODO change, the output should always be saved in ~/results (and not inputted)
+#' @export
+#' 
+
+# Load packages
 library(tidyverse)
 library(ggpubr)
 library(readxl)
@@ -21,24 +47,40 @@ library(dplyr)
 library(gridExtra)
 
 
-spatial_data_directory <- '~/data/' # data directory
-spatial_data_file      <- 'xy_data_exc_oct.tsv'
-firstNNhistogram_coordinates <- 'AUCScaledSlides_300_tumorandstroma__thresholdStromaMargin_300.tsv' # output from 1__get1NNdistances.R
-initial_params_file <- 'initial_params_weib_oct21.tsv'                        # output from 2__estimateInitialParameters.R
+# Get input system arguments
+args = commandArgs(trailingOnly=TRUE)
 
+# Double-check there is at least one argument (input file name)
+if (length(args)==0) {
+  stop("You must parse an input file", call.=FALSE)
+} else if (length(args)==2) {
+  # default output file
+  message("Output file not specified. Using default: ~/results/step2_weibull_initial_params.tsv")
+  args[3] = "step3_fittednlme_weibull_params.tsv"
+}
+firstNNhistogram_coordinates      <- args[1]  # it's the output from 1__get1NNdistances.R
+initial_params_file               <- args[2]  # it's the output from 2__estimateInitialParameters.R
+output_file                       <- args[3]
+forced_initial_params             <- NULL     # file with initial parameters to use (if user wants to force them)
+if( length(args) > 3){
+  forced_initial_params <- args[4]
+}
 
+# TODO this 
+spatial_data_file      <- './data/test_spatial_data_ovarian__processed.tsv'  # TODO adapt this is the initial input
+dumdat <- read_delim(spatial_data_file, delim='\t')
+dumdat <- as_tibble(dumdat)
+
+phenotype_combinations_to_exclude <- c('Bcell_to_negative', 'Macrophage_to_T-cell', 'Bcell_to_Cancer')
 
 # Load initial Weibull parameters (output from 2__estimateInitialParameters.R)
-initial_params <- read_delim(paste(spatial_data_directory,initial_params_file, sep=''),delim='\t')
-
+initial_params <- read_delim(initial_params_file,delim='\t')
 
 # Calculate number of cells for each cell type / sample (will be used later for filtering purposes)
-n_cells <- read_delim(paste(spatial_data_file, number_of_cells_file, sep=''), delim='\t')
+n_cells <- dumdat %>% group_by(sample_id, phenotype) %>% dplyr::summarise(n=n()) %>% as_tibble()
+rm(dumdat)
 
-n_cells <- n_cells %>%
-  mutate(phenotype=gsub('CD3\\+CD8\\+','CD8+CD3+',phenotype))
-
-xy_data_exc_oct <- read_delim(paste(spatial_data_directory, firstNNhistogram_coordinates, sep=''),delim='\t') %>%
+xy_data_exc_oct <- read_delim( firstNNhistogram_coordinates,delim='\t') %>%
   mutate(distance_window = WinMean) %>%
   mutate(x=distance_window, y=`N.per.mm2.scaled`) 
 
@@ -90,16 +132,17 @@ nfun2 <- deriv(nform2,namevec=c("A","B"),
 fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_cells,
                      initial_params_df){
   message(combi)
+
   xy_data_filt <- xy_coordinates_curves %>% filter(phenotype_combo == combi) %>% as_tibble
   
   xy_data_filt <- xy_data_filt %>% 
-    left_join(n_cells_df %>% mutate(n_from=n) %>% dplyr::select(-n), by=c('tnumber','phenotype_from'='phenotype')) %>%
-    left_join(n_cells_df %>% mutate(n_to=n) %>% dplyr::select(-n), by=c('tnumber','phenotype_to'='phenotype'))
+    left_join(n_cells_df %>% mutate(n_from=n) %>% dplyr::select(-n), by=c('sample_id','phenotype_from'='phenotype')) %>%
+    left_join(n_cells_df %>% mutate(n_to=n) %>% dplyr::select(-n), by=c('sample_id','phenotype_to'='phenotype'))
   
   threshold_cells <- threshold_filter_cells
   message(xy_data_filt %>% filter(n_from<=threshold_cells & n_to <= threshold_cells) %>%
-            mutate(tnumber=paste(tnumber, 'nFROM', as.character(n_from), 'nTO',as.character(n_to))) %>% 
-            pull(tnumber) %>% unique %>% paste(collapse=' / '))
+            mutate(sample_id=paste(sample_id, 'nFROM', as.character(n_from), 'nTO',as.character(n_to))) %>% 
+            pull(sample_id) %>% unique %>% paste(collapse=' / '))
   
   xy_data_filt <- xy_data_filt %>% filter(n_from>threshold_cells & n_to > threshold_cells)
   
@@ -108,27 +151,32 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
   ## from 100 to 300 microns will be set to 0 
   # include 0,0 or only 1,0??
   xy_data_filt <- expand.grid(x=c(1,xy_data_filt %>%pull(distance_window) %>% unique), 
-                              tnumber=xy_data_filt %>%pull(tnumber) %>% unique,
+                              sample_id=xy_data_filt %>%pull(sample_id) %>% unique,
                               phenotype_combo=combi) %>%
-    left_join(xy_data_filt, by=c('x','tnumber', 'phenotype_combo')) %>%
+    left_join(xy_data_filt, by=c('x','sample_id', 'phenotype_combo')) %>%
     mutate(y=ifelse(is.na(y),0,y))
   
   mean_params <- initial_params_df %>% filter(combo == combi) %>%
-    filter(tnumber %in% unique(xy_data_filt$tnumber)) %>% 
+    filter(sample_id %in% unique(xy_data_filt$sample_id)) %>% 
     group_by(term) %>% dplyr::summarise(mean_estimate = mean(estimate))
   
   start_params <- c(a=mean_params %>% filter(term == 'shape') %>% pull(mean_estimate),
                     b=mean_params %>% filter(term == 'scale') %>% pull(mean_estimate))
-  
-  if(combi == 'PanCK+_to_PanCK+'){
-    start_params <- c(a=3, b=10) # rewrite exception imsicion for pck-pck
+  # If user provided initial parameters, use them instead of the mean
+  if(!isNULL(forced_initial_params)){
+    start_params <- c(a=forced_initial_params %>% filter(phenotype_combo == combi) %>% pull(a),
+                      b=forced_initial_params %>% filter(phenotype_combo == combi) %>% pull(b))
+      
   }
+
+  message('Start parameters:')
+  message(start_params)
   
   fit52_oct <- tryCatch({
     nlme(y~nfun2(x,A,B),
          fixed=A+B~1,
-         random=list(tnumber=pdDiag(A+B~1)), # or pdDiag, pdLogChol
-         data=xy_data_filt %>% mutate(tnumber = factor(tnumber)),
+         random=list(sample_id=pdDiag(A+B~1)), # or pdDiag, pdLogChol
+         data=xy_data_filt %>% mutate(sample_id = factor(sample_id)),
          start=convert_params(start_params['a'], start_params['b']),
          method='REML', control = nlmeControl(maxIter = 1000, 
                                               returnObject = F,
@@ -178,6 +226,9 @@ xy_data_weib_imcision <- xy_data_weib_imcision %>% add_column(yhat=as.numeric())
 
 # Function to iterate through pheno combos
 subset_combinations <- combinations_to_study
+subset_combinations <- setdiff(subset_combinations, phenotype_combinations_to_exclude)
+# For debug purposes 
+subset_combinations <- subset_combinations[1:10]
 # Iterate through different number of threshold minimum number of cells sample
 ## (in some cases, all samples word, in other strenghter filter need to be 
 ## applied to samples with low number of cells)
@@ -228,11 +279,9 @@ for(combi in names(success_models)){
   fixefect <- fixef(success_models[[combi]])
   ranef <- ranef(success_models[[combi]])
   
-  
-  
   final_weibull_parameters <- final_weibull_parameters %>% 
     bind_rows(  ranef %>%
-                  mutate(tnumber= rownames(ranef),
+                  mutate(sample_id= rownames(ranef),
                          phenotype_combo=combi) %>% 
                   mutate(A = A + fixefect[['A']],
                          B = B + fixefect[['B']]) %>%
@@ -241,4 +290,5 @@ for(combi in names(success_models)){
 }
 
 # Save final Weibull parameters
-write_delim(final_weibull_parameters, paste(spatial_data_directory, 'global_weib_coeff_oct.tsv', sep=''))
+write_delim(final_weibull_parameters,  
+            output_file, delim='\t')

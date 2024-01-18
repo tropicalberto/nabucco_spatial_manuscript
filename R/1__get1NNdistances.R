@@ -1,5 +1,22 @@
-# STEP 1 - Takes as an input the spatial coordinates of mIF data and computes the 
-#  1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' STEP 1 
+#' 
+#' Takes as an input the spatial coordinates of mIF data and computes the 
+#' 1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' 
+#' Output is saved as a tab-delimited file (specified by output_file)
+#'
+#' @param spatial_data input spatial dataset, with at least columns: 
+#'        "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
+#' @param spatial_areas input tissue areas for each sample with at least columns: 
+#'        "sample_id', "Total.Area"
+#' @param output_file output file name 
+#' @examples
+#' # Example code
+#' Rscript --vanilla ./R/1__get1NNdistances.R data/test_spatial_data_ovarian__processed__25subset.tsv data/test_spatial_data_areas.tsv ./results/step1_1nn_output.tsv
+#' # TODO change, the output should always be saved in ~/results (and not inputted)
+#' @export
+
+# Load packages
 library(tidyverse)
 library(ggpubr)
 library(readxl)
@@ -18,21 +35,32 @@ library(raster)
 library(gridExtra)
 library(data.table)
 
-spatial_data_directory <- '~/data/' # data directory
-spatial_data_file      <- 'xy_data_exc_oct.tsv' # File with x/y coordinates from the multiplex immunofluorescence experiment
+# Get input system arguments
+args = commandArgs(trailingOnly=TRUE)
+
+# Double-check there is at least one argument (input file name)
+if (length(args)==0) {
+  stop("You must parse an input file", call.=FALSE)
+} else if (length(args)==1) {
+  # default output file
+  message("Output file not specified. Using default: ~/results/step1_1nn_output.tsv")
+  args[3] = "./results/step1_1nn_output.tsv"
+}
+spatial_data_file      <- args[1] # File with x/y coordinates from the multiplex immunofluorescence experiment
+tissue_areas_file      <- args[2]
+output_file            <- args[3]
 
 # Load Multiplex coordinates data
-# Dataframe with columns: "tnumber', "analysisregion", "layer", "Xmin", "Xmax", "Ymin", "Ymax", "Xcenter", "Ycenter", "phenotype", "cellarea"
-dumdat <- read_delim(paste(spatial_data_directory, spatial_data_file,sep=''),delim='\t')
-dumdat$analysisregion <- dumdat$`Analysis Region`
-
+# Dataframe with columns: "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
+dumdat <- read_delim(spatial_data_file, delim='\t')
+dumdat <- as_tibble(dumdat)
 
 # Load dataframe with areas
-# Dataframe with columns: "tnumber', "Tumor.Area.mm2", "Stroma.Area.mm2", "Total.Area"
+# Dataframe with columns: "sample_id', "total_area"
 # areasumm <- readRDS('~/nabucco/rmd/areasumm_oct21.rds')
 # area is in 'area' column
 
-areas <- read_delim(paste(spatial_data_file, tissue_areas_file, sep=''), delim='\t')
+areas <- read_delim(tissue_areas_file, delim='\t')
 
 # First NNdist all-against-all phenotypes
 #' @param x Multiplex immunofluorescence coordinate dataframe (with Xcenter, Ycenter, phenotype, etc)
@@ -70,19 +98,28 @@ phenotypes <- c("CD8+CD3+",
                 "negative",
                 "PanCK+")
 
+phenotypes <- c("negative", 
+                "Cancer",
+                "Bcell",
+                "Macrophage",
+                "T-cell",
+                "CD8 T-cell",
+                "Cancer")
+
+
+
 #call cores (parallelization)
 # Comment this because of limitation on core usability in darwin
 # nc <- detectCores()
 # cl <- makePSOCKcluster(floor(nc / 4) )
 # registerDoParallel(cl)
 
-
 # Compute 1-NN for all combinations of samples (n=24) x phenotype FROM (n=7) x phenotype TO (n=7)
 spatresall <-
-  foreach(i = unique(dumdat %>% pull(tnumber)),
+  foreach(i = unique(dumdat %>% pull(sample_id)),
           .packages = c('sp', 'spatstat'),
-          .final = function(x) setNames(x, unique(dumdat %>% pull(tnumber)))) %dopar% {
-            x <- dumdat[which(dumdat$tnumber == i),] 
+          .final = function(x) setNames(x, unique(dumdat %>% pull(sample_id)))) %dopar% {
+            x <- dumdat[which(dumdat$sample_id == i),] 
             phenotypes <- setNames(phenotypes, phenotypes)
             spres <-
               lapply(phenotypes, function(p1) {
@@ -110,7 +147,7 @@ dfl2 <- lapply(dfl, function(tnr){
   rbindlist(tnr, idcol = "phenotype_from")
 })
 
-dfl3 <- rbindlist(dfl2, idcol = "tnumber")
+dfl3 <- rbindlist(dfl2, idcol = "sample_id")
 dfl4 <- dfl3
 
 #add pseudocounts on distances for log transform AND division by 2 for conversion pixels to micrometers
@@ -140,7 +177,7 @@ CountRows <- function(x) {
 # Group distance vector into distance bins to calculate coordinates of histogram
 BinCounts_300_tumorandstroma <- apply(SlidingBins_300_tumorandstroma, 1, function(x) {
   CurrentWindow <- subset(NNTUR, Distance >= x[1] & Distance <= x[2])
-  GroupCounts <- CurrentWindow %>% group_by(tnumber, phenotype_from, phenotype_to) %>%
+  GroupCounts <- CurrentWindow %>% group_by(sample_id, phenotype_from, phenotype_to) %>%
     dplyr::summarise(N = dplyr::n())
   return(GroupCounts)
 })
@@ -156,7 +193,7 @@ LongBinCounts_300_tumorandstroma$WinMean <- dfslides_300_tumorandstroma$V3[match
 
 # Match total areas of the tissue 
 LongBinCounts_300_tumorandstroma$Area <- LongBinCounts_300_tumorandstroma %>%
-  left_join(data.frame(areas), by='tnumber') %>% 
+  left_join(data.frame(areas), by='sample_id') %>% 
   mutate(Area=total_area) %>% pull(Area)
 
 # N.per.mm2 is the Y coordinate of your "calculated histogram"
@@ -171,15 +208,16 @@ funAUC <- function(x,y){
 }
 
 AUCScaledSlides_300_tumorandstroma <- LongBinCounts_300_tumorandstroma %>%
-  dplyr::group_by(phenotype_from, phenotype_to, tnumber) %>% 
+  dplyr::group_by(phenotype_from, phenotype_to, sample_id) %>% 
   dplyr::mutate(N.per.mm2.scaled = N.per.mm2 / funAUC(WinMean, N.per.mm2))
 
 #double check if the AUC of AUCs is 1
 AUCcheck_panck <- AUCScaledSlides_300_tumorandstroma %>%
-  dplyr::group_by(phenotype_from, phenotype_to, tnumber) %>%
+  dplyr::group_by(phenotype_from, phenotype_to, sample_id) %>%
   dplyr::mutate(AUC = funAUC(WinMean, N.per.mm2.scaled))
 
 # Store output (coordinates of histograms of 1-NN distances per patient)
-write_delim(AUCScaledSlides_300_tumorandstroma %>% mutate(phenotype_combo=paste(phenotype_from,phenotype_to,sep='_to_')), 
-            paste(spatial_data_directory, 'AUCScaledSlides_300_tumorandstroma__thresholdStromaMargin_', as.character(threshold_pixels/2), '.tsv', sep=''),delim='\t')
+write_delim(AUCScaledSlides_300_tumorandstroma %>% 
+                  mutate(phenotype_combo=paste(phenotype_from,phenotype_to,sep='_to_')), 
+            paste(output_file, sep=''),delim='\t')
 
