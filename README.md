@@ -61,6 +61,9 @@ Example run:
 `Rscript --vanilla ./R/1__get1NNdistances.R data/test_spatial_data_ovarian__processed.tsv data/test_spatial_data_areas.tsv ./results/step1_1nn_output.tsv` 
 
 
+`Rscript --vanilla ./R/1__get1NNdistances.R data/test_spatial_data_ovarian__processed__25subset.tsv ~/nabucco_spatial_manuscript/results/ovarian__areas_total_df__separated_tumor_stroma__processed__TOTAL.tsv ./results/step1_1nn_output__subset25.tsv` 
+
+
 ### STEP 2) Estimate initial Weibull parameters
 
 `Rscript --vanilla ./R/2__estimateInitialParameters.R <output_step_1> <output_file>`
@@ -71,10 +74,11 @@ The input is:
 Example run:
 
 `Rscript --vanilla ./R/2__estimateInitialParameters.R results/step1_1nn_output.tsv ./results/step2_weibull_initial_params.tsv`
+`Rscript --vanilla ./R/2__estimateInitialParameters.R results/step1_1nn_output__subset25.tsv ./results/step2_weibull_initial_params__subset25.tsv`
 
 ### STEP 3) Fit a Weibull distribution using a NLME model
 
-`Rscript --vanilla ./R/3__Fitnlmemodel.R <output_step_1> <output_step_2> <output_file>`
+`Rscript --vanilla ./R/3__Fitnlmemodel.R <spatial_dataset> <output_step_1> <output_step_2> <output_file>`
 The input is: 
 * **<output_step_1>**: output file from step 1
 * **<output_step_2>**: output file from step 2
@@ -82,7 +86,17 @@ The input is:
 
 Example run:
 
-`Rscript --vanilla ./R/3__Fitnlmemodel.R results/step1_1nn_output.tsv results/step2_weibull_initial_params.tsv  ./results/step3_fittednlme_weibull_params.tsv`
+`Rscript --vanilla ./R/3__Fitnlmemodel.R ./R/3__Fitnlmemodel.R data/test_spatial_data_ovarian__processed.tsv results/step1_1nn_output.tsv results/step2_weibull_initial_params.tsv  ./results/step3_fittednlme_weibull_params.tsv`
+
+`Rscript --vanilla ./R/3__Fitnlmemodel.R data/test_spatial_data_ovarian__processed__25subset.tsv results/step1_1nn_output__subset25.tsv results/step2_weibull_initial_params__subset25.tsv  ./results/step3_fittednlme_weibull_params__subset25.tsv`
+
+An example on how to explore the fitted data can be found in `rmd/explore_fits.Rmd`
+
+If the user wants to force the initial parameters (e.g., the initial estimation from step 2 is wrong) user can modify the initial parameter file from step 2 <output_step_2> and parse it to step 3. 
+
+# TODO Wrapper
+Put here? 
+
 
 # Notes on the pipeline 
 
