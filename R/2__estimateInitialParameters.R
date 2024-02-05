@@ -1,9 +1,10 @@
-# STEP 2 - Script to estimate initial Weibull parameters for the 1-NN distribution
+#' @author Alberto Gil-Jimenez
+#' Manuscript: Spatial relationships in the urothelial and head and neck tumor microenvironment predict response to combination immune checkpoint inhibitors
+
 
 #' STEP 1 
 #' 
-#' Takes as an input the spatial coordinates of mIF data and computes the 
-#' 1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' Script to estimate initial Weibull parameters for the 1-NN distribution
 #' 
 #' Output is saved as a tab-delimited file (specified by output_file)
 #'
@@ -15,7 +16,6 @@
 #' @examples
 #' # Example code
 #' Rscript --vanilla ./R/2__estimateInitialParameters.R results/step1_1nn_output.tsv ./results/step2_weibull_initial_params.tsv
-#' # TODO change, the output should always be saved in ~/results (and not inputted)
 #' @export
 
 # Load packages

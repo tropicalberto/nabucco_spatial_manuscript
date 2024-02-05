@@ -1,26 +1,28 @@
-# STEP 3 - Fit a Weibull function using a nonlinear-mixed fixed effect model to the 1-NN distribution curve
-# STEP 2 - Script to estimate initial Weibull parameters for the 1-NN distribution
+#' @author Alberto Gil-Jimenez
+#' Manuscript: Spatial relationships in the urothelial and head and neck tumor microenvironment predict response to combination immune checkpoint inhibitors
 
-#' STEP 1 
+#' STEP 3 
 #' 
-#' Takes as an input the spatial coordinates of mIF data and computes the 
-#' 1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' Fit a Weibull function using a nonlinear-mixed fixed effect model to the 1-NN distribution curve
+#' 
+#' Parameter `phenotype_combinations_to_exclude` (cell-cell spatial relationship combinations to exclude) must be specified in the code
+#' Parameter `threshold_pixels` (max number of pixels to take into account for 1-NN estimation curves) must be specified in the code
 #' 
 #' Output is saved as a tab-delimited file (specified by output_file)
 #'
 #' @param spatial_data input spatial dataset, with at least columns: 
 #'        "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
-#' @param spatial_areas input tissue areas for each sample with at least columns: 
-#'        "sample_id', "Total.Area"
-#' @param output_file output file name 
-#' @param initial_parameters file with initial parameters for the non-linear mixed effect model,
-#'        with at least the columns:
-#'        "phenotype_combo", "a", "b"
-#'        (phenotype_combo = spatial relationship; a = shape parameter; b = scale parameter)
+#' @param firstNNhistogram_coordinates output from step1 with the coordinates of the
+#'        normalized 1-NN histogram with at least columns: 
+#'        "sample_id', "WinMean", "N.per.mm2.scaled", "phenotype_combo"
+#' @param initial_params_file output from step2 with the coordinates of the
+#'        initially-guessed initial Weibull distribution parameters fitted to the 
+#'        1-NN distribution data, with at least the columns: 
+#'        "term', "estimate", "combo"
+#' @param output_file output file name  for step 3
 #' @examples
 #' # Example code
-#' Rscript --vanilla ./R/3__Fitnlmemodel.R results/step1_1nn_output.tsv results/step2_weibull_initial_params.tsv  ./results/step3_fittednlme_weibull_params.tsv
-#' # TODO change, the output should always be saved in ~/results (and not inputted)
+#' Rscript --vanilla ./R/3__Fitnlmemodel.R data/test_spatial_data_ovarian__processed__25subset.tsv results/step1_1nn_output.tsv results/step2_weibull_initial_params.tsv  ./results/step3_fittednlme_weibull_params.tsv
 #' @export
 #' 
 
@@ -47,7 +49,19 @@ library(dplyr)
 library(gridExtra)
 
 
-# Get input system arguments
+### Pre-specified parameters
+# Phenotype combinations to exclude from parameter estimation (if they are problematic)
+phenotype_combinations_to_exclude <- c('Bcell_to_negative', 'Macrophage_to_T-cell', 'Bcell_to_Cancer')
+
+# Define maximum Shape (A_max) and maximum Scale (B_max) parameters for your fits
+# It might need to be adapted depending on the units of input data
+B_max <- 500 # max scale parameter (0,500]
+A_max <- 10  # max shape parameter (0,10]
+
+threshold_pixels <- 300
+threshold_microns <- threshold_pixels/2
+
+##### Get input system arguments
 args = commandArgs(trailingOnly=TRUE)
 
 # Double-check there is at least one argument (input file name)
@@ -58,20 +72,15 @@ if (length(args)==0) {
   message("Output file not specified. Using default: ~/results/step2_weibull_initial_params.tsv")
   args[3] = "step3_fittednlme_weibull_params.tsv"
 }
-firstNNhistogram_coordinates      <- args[1]  # it's the output from 1__get1NNdistances.R
-initial_params_file               <- args[2]  # it's the output from 2__estimateInitialParameters.R
-output_file                       <- args[3]
+spatial_data_file                 <- args[1]  # File with x/y coordinates from the multiplex immunofluorescence experiment
+firstNNhistogram_coordinates      <- args[2]  # it's the output from 1__get1NNdistances.R
+initial_params_file               <- args[3]  # it's the output from 2__estimateInitialParameters.R
+output_file                       <- args[4]
 forced_initial_params             <- NULL     # file with initial parameters to use (if user wants to force them)
-if( length(args) > 3){
-  forced_initial_params <- args[4]
-}
 
-# TODO this 
-spatial_data_file      <- './data/test_spatial_data_ovarian__processed.tsv'  # TODO adapt this is the initial input
 dumdat <- read_delim(spatial_data_file, delim='\t')
 dumdat <- as_tibble(dumdat)
 
-phenotype_combinations_to_exclude <- c('Bcell_to_negative', 'Macrophage_to_T-cell', 'Bcell_to_Cancer')
 
 # Load initial Weibull parameters (output from 2__estimateInitialParameters.R)
 initial_params <- read_delim(initial_params_file,delim='\t')
@@ -85,12 +94,6 @@ xy_data_exc_oct <- read_delim( firstNNhistogram_coordinates,delim='\t') %>%
   mutate(x=distance_window, y=`N.per.mm2.scaled`) 
 
 
-threshold_pixels <- 300
-threshold_microns <- threshold_pixels/2
-
-# Define maximum Shape (A_max) and maximum Scale (B_max) parameters for your fits
-B_max <- 500 # max scale parameter (0,500]
-A_max <- 10  # max shape parameter (0,10]
 
 # Define Weibull and parameterized Weibull functions, and functions to convert between parameterized and
 ## non parameterized Weibull
@@ -163,7 +166,7 @@ fit_data <- function(xy_coordinates_curves, combi, n_cells_df, threshold_filter_
   start_params <- c(a=mean_params %>% filter(term == 'shape') %>% pull(mean_estimate),
                     b=mean_params %>% filter(term == 'scale') %>% pull(mean_estimate))
   # If user provided initial parameters, use them instead of the mean
-  if(!isNULL(forced_initial_params)){
+  if(!is.null(forced_initial_params)){
     start_params <- c(a=forced_initial_params %>% filter(phenotype_combo == combi) %>% pull(a),
                       b=forced_initial_params %>% filter(phenotype_combo == combi) %>% pull(b))
       

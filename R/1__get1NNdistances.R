@@ -1,7 +1,12 @@
+#' @author Alberto Gil-Jimenez
+#' Manuscript: Spatial relationships in the urothelial and head and neck tumor microenvironment predict response to combination immune checkpoint inhibitors
+
 #' STEP 1 
 #' 
 #' Takes as an input the spatial coordinates of mIF data and computes the 
 #' 1-NN distances histogram for each sample / cell FROM / cell TO combination
+#' 
+#' Parameter `phenotypes` (unique cell types in your dataset) must be specified in the code
 #' 
 #' Output is saved as a tab-delimited file (specified by output_file)
 #'
@@ -13,7 +18,6 @@
 #' @examples
 #' # Example code
 #' Rscript --vanilla ./R/1__get1NNdistances.R data/test_spatial_data_ovarian__processed__25subset.tsv data/test_spatial_data_areas.tsv ./results/step1_1nn_output.tsv
-#' # TODO change, the output should always be saved in ~/results (and not inputted)
 #' @export
 
 # Load packages
@@ -35,6 +39,16 @@ library(raster)
 library(gridExtra)
 library(data.table)
 
+# Define which phenotypes will be studied (UNIQUE CELL TYPES IN YOUR DATASET)
+phenotypes <- c("negative", 
+                "Cancer",
+                "Bcell",
+                "Macrophage",
+                "T-cell",
+                "CD8 T-cell",
+                "Cancer")
+
+
 # Get input system arguments
 args = commandArgs(trailingOnly=TRUE)
 
@@ -47,8 +61,8 @@ if (length(args)==0) {
   args[3] = "./results/step1_1nn_output.tsv"
 }
 spatial_data_file      <- args[1] # File with x/y coordinates from the multiplex immunofluorescence experiment
-tissue_areas_file      <- args[2]
-output_file            <- args[3]
+tissue_areas_file      <- args[2] # File with tissue areas
+output_file            <- args[3] # Output file
 
 # Load Multiplex coordinates data
 # Dataframe with columns: "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
@@ -88,25 +102,6 @@ distances <- function(x, phenotype1,phenotype2) {
   }
   return(res)
 }
-
-# Define which phenotypes will be studied (UNIQUE CELL TYPES IN YOUR DATASET)
-phenotypes <- c("CD8+CD3+", 
-                "CD3+",
-                "CD3+FoxP3+",
-                "CD68+",
-                "CD20+",
-                "negative",
-                "PanCK+")
-
-phenotypes <- c("negative", 
-                "Cancer",
-                "Bcell",
-                "Macrophage",
-                "T-cell",
-                "CD8 T-cell",
-                "Cancer")
-
-
 
 #call cores (parallelization)
 # Comment this because of limitation on core usability in darwin
@@ -162,9 +157,9 @@ rm(dfl)
 rm(dfl2)
 rm(dfl3)
 rm(dfl4)
-gc() # do garbage collection to free up memory
-#count 1-NN distances with sliding window of 5 microns (this is to create a smoothed histogram)
+gc() # free up memory
 
+#### Count 1-NN distances with sliding window of 5 microns (this is to create a smoothed histogram)
 # Explore data from 0 to 300 microns 
 SlidingBins_300_tumorandstroma <- rollapply(c(0:300),5,function(y) { return(c(min(y),max(y)))})
 
