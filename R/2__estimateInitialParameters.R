@@ -98,9 +98,9 @@ for(combo in unique(all_distances_data %>%  pull(phenotype_combo))){
   
   for(tn in unique(all_combos_dists  %>% pull(sample_id))){
     # take into account only 1-NN dists < 100, because of the precision of fitdists (no of bins in histogram)
-    # EXCEPT for From/To PanCK or negative
+    # EXCEPT for From/To PanCK or negative (special case)
     # the parameters will be further optimized later
-    if(str_detect(combo, 'PanCK\\+_') | str_detect(combo, 'negative_')){
+    if(str_detect(combo, 'PanCK\\+_') | str_detect(combo, 'negative_') | str_detect(combo, 'Cancer_') | str_detect(combo, 'Negative_')){
       params <- fitdist(all_combos_dists %>% 
                           filter(combo == combo) %>% filter(sample_id == tn)  %>%
                           pull(dists) ,"weibull") %>% summary 
