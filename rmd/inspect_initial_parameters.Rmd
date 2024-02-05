@@ -1,0 +1,76 @@
+---
+title: "Explore initial Weibull parameters from step 2"
+author: “Alberto Gil"
+date: " `r format(Sys.time(), '%A %B %d, %Y (%H:%M:%S)')` "
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+  word_document: default
+geometry: a4paper,headheight=80pt,bottom=30mm,footskip=60pt,right=16mm,left=22mm
+fontsize: 9ptl
+---
+
+
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(dplyr)
+library(spatstat)
+library(data.table)
+library(DT)
+
+weibfunc <- function(x,a,b){
+  return(((a/b) * ((x/b)^(a-1)) * exp(- (x/b)^a)))
+}
+
+```
+
+# Input data 
+
+```{r}
+data_dir<- '~/nabucco_spatial_manuscript/'
+output_step_1 <- './results/step1_1nn_output__subset25.tsv'
+output_step_2 <- './results/step2_weibull_initial_params__subset25.tsv'
+
+curves_1nn <- read_delim(paste(data_dir, output_step_1, sep=''), delim='\t')
+initial_parameters <- read_delim(paste(data_dir, output_step_2, sep=''), delim='\t')
+
+# Compute the initial paramters
+initial_parameters <- initial_parameters %>% group_by(combo, term) %>% dplyr::summarise(estimate=mean(estimate)) %>% spread(key='term',value='estimate')
+datatable(initial_parameters)
+```
+
+# Explore one spatial relationship
+
+```{r}
+spatial_relationship <- 'Macrophage_to_Cancer'
+initial_parameters_selected <- initial_parameters %>% filter(combo == spatial_relationship)
+
+curves_1nn %>%
+  filter(phenotype_combo == spatial_relationship) %>% 
+  mutate(fitted=weibfunc(WinMean, initial_parameters_selected$shape, initial_parameters_selected$scale)) %>% 
+  ggplot(aes(x=WinMean, y=`N.per.mm2.scaled`)) +
+  geom_line(aes(group=sample_id), size=0.1) +
+  geom_line(aes(x=WinMean, y=fitted), color='red') +
+  theme_bw() + ggtitle('Macrophage_to_Cancer;\nBlack = raw 1-NN data; Red = Weibull distribution built with initial parameters')
+```
+
+A better initial parameter can be forced by tweaking the start parameters (in this case: increase the shape value by 1 unit, decrease the scale value by 11 units)
+
+
+```{r}
+spatial_relationship <- 'Macrophage_to_Cancer'
+initial_parameters_selected <- initial_parameters %>% filter(combo == spatial_relationship)
+
+
+curves_1nn %>%
+  filter(phenotype_combo == spatial_relationship) %>% 
+  mutate(fitted=weibfunc(WinMean, initial_parameters_selected$shape+1, initial_parameters_selected$scale-11)) %>% 
+  ggplot(aes(x=WinMean, y=`N.per.mm2.scaled`)) +
+  geom_line(aes(group=sample_id), size=0.1) +
+  geom_line(aes(x=WinMean, y=fitted), color='red') +
+  theme_bw() + ggtitle('Macrophage_to_Cancer;\nBlack = raw 1-NN data; Red = Weibull distribution built with adjusted parameters')
+```
+

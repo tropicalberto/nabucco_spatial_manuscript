@@ -1,0 +1,88 @@
+---
+title: "Example explore fitted parameters (Ovarian dataset) "
+author: “Alberto Gil"
+date: " `r format(Sys.time(), '%A %B %d, %Y (%H:%M:%S)')` "
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+  word_document: default
+geometry: a4paper,headheight=80pt,bottom=30mm,footskip=60pt,right=16mm,left=22mm
+fontsize: 9ptl
+---
+
+
+```{r}
+library(tidyverse)
+library(patchwork)
+library(DT)
+library(data.table)
+
+
+weibfunc <- function(x,a,b){
+  return(((a/b) * ((x/b)^(a-1)) * exp(- (x/b)^a)))
+}
+
+weibull_cdf <- function(x,a,b){
+  return(1-exp(-(x/b)^a))
+}
+```
+
+
+```{r}
+fitted_parameters <- read_delim('~/nabucco_spatial_manuscript/results/step3_fittednlme_weibull_params__subset25.tsv',
+                                delim='\t')
+spatial_1nn_curves <- read_delim('~/nabucco_spatial_manuscript/results/step1_1nn_output__subset25.tsv',
+                                delim='\t')
+```
+Fitted parameters:
+
+```{r}
+fitted_parameters %>% data.table()
+```
+
+Fitted parameters can be used in downstream analyses (recommendation: explore scale in a logarithmic scale)
+
+```{r}
+# append spatial parameters
+spatial_1nn_curves <- spatial_1nn_curves %>% 
+  left_join(fitted_parameters, by=c('sample_id','phenotype_combo'))
+```
+
+
+```{r, fig.width=12, fig.height=6}
+head(spatial_1nn_curves)
+
+spatial_1nn_curves %>% 
+  filter(phenotype_combo == 'CD8 T-cell_to_Cancer') %>% 
+  filter(!is.na(a)) %>% 
+  mutate(fitted=weibfunc(WinMean,a,b)) %>% 
+  ggplot() +
+  geom_point(aes(x=WinMean, y=`N.per.mm2.scaled`), size=0.4) +
+  geom_line(aes(x=WinMean, y=fitted, group=sample_id), size=0.4, color='red') +
+  theme_bw() + 
+  facet_wrap(~sample_id) +
+  ggtitle('CD8 T-cell to cancer cell\nBlack = Raw 1-NN data; Red = Fitted Weibull distribution')
+```
+
+
+```{r, fig.width=12, fig.height=6}
+for(pheno_combo in unique(fitted_parameters$phenotype_combo)){
+plot <- spatial_1nn_curves %>% 
+  filter(phenotype_combo == pheno_combo) %>% 
+  filter(!is.na(a)) %>% 
+  mutate(fitted=weibfunc(WinMean,a,b)) %>% 
+  ggplot() +
+  geom_point(aes(x=WinMean, y=`N.per.mm2.scaled`), size=0.4) +
+  geom_line(aes(x=WinMean, y=fitted, group=sample_id), size=0.4, color='red') +
+  theme_bw() + 
+  facet_wrap(~sample_id) +
+  ggtitle(paste(pheno_combo, 'Black = Raw 1-NN data; Red = Fitted Weibull distribution', sep='\n'))
+
+print(plot)
+}
+
+```
+
