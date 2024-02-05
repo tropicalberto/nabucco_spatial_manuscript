@@ -1,0 +1,450 @@
+---
+title: "Manuscript figures"
+author: “Alberto Gil"
+date: " `r format(Sys.time(), '%A %B %d, %Y (%H:%M:%S)')` "
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    code_folding: hide
+  word_document: default
+geometry: a4paper,headheight=80pt,bottom=30mm,footskip=60pt,right=16mm,left=22mm
+fontsize: 9ptl
+---
+
+Code to reproduce the figures from the manuscript with the source data files provided.
+
+```{r}
+library(tidyverse)
+library(plyr)
+library(ggpubr)
+library(readxl)
+library(patchwork)
+library(ggrastr)
+library(RColorBrewer)
+library(ggrepel)
+library(ggforce)
+
+map_ab_names <- function(ab_name){
+  return(mapvalues(ab_name, from=c('CD20+', 'CD3+', 'CD3+FoxP3+', 'CD68+', 'CD8+CD3+', 'negative','PanCK+'),
+            to=c('B','Th','Treg','MP','CD8 T','NEG','TUM')))
+}
+
+weibfunc <- function(x,a,b){
+  return(((a/b) * ((x/b)^(a-1)) * exp(- (x/b)^a)))
+}
+
+weibull_cdf <- function(x,a,b){
+  return(1-exp(-(x/b)^a))
+}
+```
+
+
+# Figure 2 
+
+```{r}
+fig2a <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig2a.xlsx')
+fig2b <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig2b.xlsx')
+fig2c <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig2c.xlsx')
+fig2d <- fig2a
+```
+
+```{r}
+f2a0_v2_alt <- ggplot() +
+  geom_point_rast(aes(x=a, y=b),size=0.3, color='black',alpha=1,
+             data=fig2a %>% filter(label_sample == 'Other')) +
+   geom_point(aes(x=a, y=b), color='white',size=4.5, alpha=0.8,
+             data=fig2a %>% filter(label_sample != 'Other'))  +
+  geom_point(aes(x=a, y=b, color=label_sample),size=3, alpha=1,
+             data=fig2a %>% filter(label_sample != 'Other'))  +
+  # geom_point(aes(x=mean_a,y=mean_b, fill=phenotype_from), color='black', size=2, shape=21, stat='unique') + 
+  # geom_density_2d() +
+  theme_bw() + scale_y_log10() + 
+  xlab('Shape') + ylab('Scale') +
+  # facet_wrap(~phenotype_to,nrow=1, scales='free_x') + 
+  scale_color_manual(values=c( brewer.pal(3, 'Dark2'), '#71d5f4', 'Black')) +
+  # scale_fill_brewer(palette='Set2')+
+  theme(legend.position='none')
+```
+
+```{r}
+f2a_v2_alt <- merge(data.frame(x=1:300),data.frame(a=3.96, b=10.9, sample='A')) %>% 
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=2.1, b=19.9, sample='B')) ) %>%
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=1.41	,b= 104.6, sample='C')) ) %>% 
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=2.21, b=204.7, sample='D')) ) %>% 
+  mutate(y=weibfunc(x,a,b)) %>% 
+  # filter(x<25) %>% 
+  # filter(tnumber %in%  c('T18-20754', 'T18-21398', 'T18-23639') ) %>% 
+  filter(x < 300) %>% 
+  # mutate(tnumber=paste(round(a,digits=2),round(b,digits=2),tnumber)) %>%
+  ggplot(aes(color=sample))+
+  # geom_line(aes(x=x,y=`N.per.mm2.scaled`, group=tnumber, linetype=2), linetype=2,alpha=0.7) + 
+    geom_line(aes(x=x,y=y, group=sample), alpha=1,size=1) + 
+  theme_bw() +
+  ylab('Normalized\ncounts') + xlab('1-NN distance (microns)') +
+  scale_x_continuous(expand = expansion(mult = c(0, 0))) + scale_y_continuous(expand = expansion(mult = c(0, 0))) +
+  # facet_wrap(~tnumber) +
+  # facet_wrap(~phenotype_combo) + 
+  # theme(strip.text=element_text(size=7)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+   # scale_color_manual(values = c(
+   #  'Raw' = 'Black',
+   #  'Fitted' = 'darkred')) +
+  labs(color = '') + theme(legend.key.height= unit(0.5, 'cm'),
+        legend.key.width= unit(1, 'cm')) + theme(legend.position = 'none') +
+  scale_color_manual(values=c(brewer.pal(3, 'Dark2'), '#71d5f4'))
+```
+
+```{r}
+f2b_v2_alt <-  merge(data.frame(x=1:300),data.frame(a=3.96, b=10.9, sample='A')) %>% 
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=2.1, b=19.9, sample='B')) ) %>%
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=1.41	,b= 104.6, sample='C')) ) %>% 
+  bind_rows(merge(data.frame(x=1:300),data.frame(a=2.21, b=204.7, sample='D')) ) %>% 
+  # mutate(y=weibfunc(x,a,b))%>% 
+  mutate(y=weibull_cdf(x,a,b)) %>% 
+  # filter(x<25) %>% 
+  # filter(tnumber %in%  c('T18-20754', 'T18-21398', 'T18-23639') ) %>% 
+  filter(x < 300) %>% 
+  # mutate(tnumber=paste(round(a,digits=2),round(b,digits=2),tnumber)) %>%
+  ggplot(aes(color=sample))+
+  # geom_line(aes(x=x,y=`N.per.mm2.scaled`, group=tnumber, linetype=2), linetype=2,alpha=0.7) + 
+    geom_line(aes(x=x,y=y, group=sample), alpha=1,size=1) + 
+  theme_bw() +
+  ylab('G(r)') + xlab('1-NN distance (microns)') +
+  scale_x_continuous(expand = expansion(mult = c(0, 0)), limits=c(0,300)) + scale_y_continuous(expand = expansion(mult = c(0, 0)), limits=c(0,1.05)) +
+  # facet_wrap(~tnumber) +
+  # facet_wrap(~phenotype_combo) + 
+  # theme(strip.text=element_text(size=7)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank()) +
+   # scale_color_manual(values = c(
+   #  'Raw' = 'Black',
+   #  'Fitted' = 'darkred')) +
+  labs(color = '') + theme(legend.key.height= unit(0.5, 'cm'),
+        legend.key.width= unit(1, 'cm')) + theme(legend.position = 'none') +
+  scale_color_manual(values=c(brewer.pal(3, 'Dark2'), '#71d5f4'))
+# + facet_wrap(~phenotype_combo) +
+
+
+```
+
+```{r}
+params_plot_v3 <- fig2d %>% 
+  mutate(`Phenotype FROM:`=phenotype_from) %>%
+  mutate(phenotype_to=paste('From X to', phenotype_to)) %>% 
+  # mutate(phenotype_to=factor(phenotype_to,
+  #                            levels=paste('From X to', c('Cancer cell', 'Negative cell', 'B-cell', 'CD4 T-cell','Macrophages',  'CD8 T-cell',  'FoxP3 T-cell'  )))) %>%
+  # mutate(phenotype_to = mapvalues(phenotype_to, 
+  #                                 from=c('From X to Cancer cell','From X to Negative cell', 'From X to B-cell', 'From X to CD4 T-cell', 'From X to Macrophages', 'From X to CD8 T-cell',
+  #                                        'From X to FoxP3 T-cell'),
+  #                                 to=c('1 - \tFrom X to Cancer cell','2 - \tFrom X to Negative cell', '3 - \tFrom X to B-cell', '4 - \tFrom X to CD4 T-cell', '5 - \tFrom X to Macrophages',
+  #                                      '6 - \tFrom X to CD8 T-cell','7 - \tFrom X to FoxP3 T-cell') )
+  # ) %>%  
+  ggplot() +
+  geom_point_rast(aes(x=a, y=b, color=`Phenotype FROM:`), alpha=0.5, size=0.5) +
+  geom_point(aes(x=mean_a,y=mean_b, fill=`Phenotype FROM:`), color='black', size=2, shape=21, stat='unique') + 
+  # geom_density_2d() +
+  theme_bw() + scale_y_log10() + 
+  xlab('Shape') + ylab('Scale') + facet_wrap(~phenotype_to,nrow=2) + scale_color_brewer(palette='Set2') +
+  scale_fill_brewer(palette='Set2')+
+  theme(legend.position='bottom') +  guides(colour = guide_legend(nrow = 1))
+```
+
+```{r, fig.width=12, fig.height=6}
+(f2a0_v2_alt + ( ( f2a_v2_alt + theme(panel.spacing=unit(0, "lines"))+ theme(plot.margin=grid::unit(c(0,0,0,0), "mm")) )  / (f2b_v2_alt + theme(panel.spacing=unit(0, "lines")) + geom_vline(xintercept=25, linetype='dotted')) + theme(plot.margin=grid::unit(c(0,0,0,0), "mm"))) + plot_layout(nrow=1, byrow=FALSE)
+           # geom_text(aes(x=16, y=0.125, label='G AUC=12.9'), color='black') + 
+              ) / (params_plot_v3 + facet_wrap(~phenotype_to, nrow=2) )+ plot_annotation(tag_levels = 'A') +
+  plot_layout(nrow=2, byrow=FALSE, heights=c(1,1))
+  # ggsave(filename = paste("~/nabucco/results/spatial_analysis/global_nlme_weibull_oct21/Fig2_vG__ALTexamples",'.pdf', sep=''), width=12,
+  #       height=8, units="in",
+  #       useDingbats=FALSE, dpi=360)
+```
+
+
+# Figure 3
+
+
+```{r}
+fig3a <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3a.xlsx')
+fig3b <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3b.xlsx')
+fig3c <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3c.xlsx')
+fig3d <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3d.xlsx')
+fig3e <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3e.xlsx')
+fig3f <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3ef.xlsx')
+fig3g <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig3g.xlsx')
+```
+
+
+```{r, fig.width=3, fig.height=3}
+g_plot <- fig3a %>%
+  mutate(`G(r) AUC\n25 microns`=aucobs25microns) %>% 
+  mutate(`G-AUC-25`=aucobs25microns) %>% 
+ ggplot() +
+  geom_point(aes(x=a, y=b, color=`G-AUC-25`),  size=0.5) +
+  # geom_point(aes(x=mean_a,y=mean_b, fill=phenotype_from), color='black', size=2, shape=21, stat='unique') + 
+  # geom_errorbar(aes(x=mean_a,y=mean_b, xmin=mean_a-sd_a, xmax=mean_a+sd_a, color=phenotype_from), alpha=0.1) +
+    # geom_errorbar(aes(x=mean_a,y=mean_b, ymin=mean_b-sd_b, ymax=mean_b+sd_b, color=phenotype_from), alpha=0.1) +
+  # geom_density_2d() +
+  theme_bw() + scale_y_log10() + 
+  xlab('Shape') + ylab('Scale') +# scale_color_brewer(palette='Set2') +
+  # scale_fill_brewer(palette='Set2')+
+  theme(legend.position='bottom') +# guides(colour = guide_legend(override.aes = list(size=4))) +
+  ggtitle('Real data') + scale_color_distiller(palette='RdYlGn')
+
+plot_1 <- fig3b %>% mutate(ptID=factor(ptID)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=ptID, color=ptID), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+plot_2 <- fig3c %>% mutate(ptID=factor(ptID)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=ptID, color=ptID), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+plot_3 <- fig3d %>% mutate(sample=factor(sample)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=sample, color=sample), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+plot_4 <- fig3e %>% mutate(ptID=factor(ptID)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=ptID, color=ptID), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+plot_5 <- fig3f %>% mutate(ptID=factor(ptID)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=ptID, color=ptID), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+plot_6 <- fig3g %>% mutate(sample=factor(sample)) %>% 
+  ggplot(aes(x=x, y=y)) +
+  geom_line(aes(group=sample, color=sample), size=1.5) + 
+  theme_bw() +
+  scale_y_continuous(expand=expansion(mult=c(0,0))) +
+  scale_x_continuous(expand=expansion(mult=c(0,0))) +
+  theme(legend.position = 'none') +
+  scale_color_brewer(palette='Paired') +
+  xlab('1-NN distance (microns)') + ylab('Normalized counts')
+
+g_plot
+plot_1
+plot_2
+plot_3
+plot_4
+plot_5
+plot_6
+```
+
+
+# Figure 4
+
+Fig4_vG_pvals_v2.pdf
+
+```{r}
+fig4a <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4a.xlsx')
+fig4b <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4b.xlsx')
+fig4c <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4c.xlsx')
+fig4d <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4d.xlsx')
+fig4e <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4e.xlsx')
+fig4f <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4f.xlsx')
+fig4g <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig4g.xlsx')
+```
+
+```{r}
+volcano_densities_v2 <- fig4a %>% 
+  ggplot(aes(x=FC, y=fdr, label=label)) +
+  geom_hline(yintercept=0.1,color='red') + 
+  geom_point(aes(color=is_significant)) + 
+  geom_text_repel(box.padding = 0.5, size=3) +
+  # ylim(0.01,1) +
+  scale_y_continuous(trans = trans_reverser('log10'), limits=c(1, 0.01)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  scale_color_manual(values=c('TRUE'='black','FALSE'='grey')) +
+  ylab('Adjusted p-val') + xlab('Fold change') + ggtitle('Density') +
+  scale_x_continuous(limits=c(-max(abs(fig4a$FC)), max(abs(fig4a$FC))))
+
+volcano_exclusion_ratios_v2 <- fig4b %>% 
+  ggplot(aes(x=FC, y=fdr, label=label)) +
+  geom_hline(yintercept=0.1,color='red') + 
+  geom_point(aes(color=is_significant)) + 
+  geom_text_repel(box.padding = 0.5, size=3) +
+  # ylim(0.01,1) +
+  scale_y_continuous(trans = trans_reverser('log10'), limits=c(1, 0.01)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  scale_color_manual(values=c('TRUE'='black','FALSE'='grey')) +
+  ylab('Adjusted p-val') + xlab('Fold change') + ggtitle('Exclusion ratio') +
+    scale_x_continuous(limits=c(-max(abs(fig4b$FC)), max(abs(fig4b$FC))))
+
+volcano_shape <- fig4c %>% 
+  ggplot(aes(x=FC, y=fdr, label=label)) +
+  geom_hline(yintercept=0.1,color='red') + 
+  geom_point(aes(color=is_significant)) + 
+  geom_text_repel(box.padding = 0.5, size=3) +
+  # ylim(0.01,1) +
+  scale_y_continuous(trans = trans_reverser('log10'), limits=c(1, 0.01)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  scale_color_manual(values=c('TRUE'='black','FALSE'='grey')) +
+  ylab('Adjusted p-val') + xlab('Fold change (log10)') + ggtitle('Shape')
+
+volcano_scale <-fig4d  %>% 
+  ggplot(aes(x=FC, y=fdr, label=label)) +
+  geom_hline(yintercept=0.1,color='red') + 
+  geom_point(aes(color=is_significant)) + 
+  geom_text_repel(box.padding = 0.5, size=3) +
+  scale_y_continuous(trans = trans_reverser('log10'), limits=c(1,0.01)) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  scale_color_manual(values=c('TRUE'='black','FALSE'='grey')) +
+  ylab('Adjusted p-val') + xlab('Fold change') + ggtitle('Scale')
+
+patch_v2 <- ( volcano_densities_v2 + ggtitle('Immune cell density\nvs ICI response') + xlab('Fold change') +  
+    volcano_exclusion_ratios_v2 + ggtitle('Immune cell exclusion\nratio vs ICI response') + xlab('Fold change')) + volcano_shape + volcano_scale + plot_layout(nrow=1)
+```
+
+
+```{r}
+median_distances_response_boxplot_v2 <- fig4e %>% 
+  ggplot(aes(x=two_class_pa_response, y=median, fill=two_class_pa_response, alpha=0.6)) +
+
+  geom_boxplot(width=0.4, alpha=1) +   geom_dotplot(binaxis='y', stackdir='center', dotsize=0.6,fill='black',
+                                                       colour="black",pch=1)+ 
+  facet_wrap(~phenotype_combo, scales='free_y', nrow=1) +
+  theme_bw() + 
+  xlab('') + ylab('Median 1-NN distance (microns)') + scale_fill_manual(values=c("#56B4E9","#D55E00")) +
+  theme(legend.position='none') + stat_compare_means(comparisons=list(c('Responders','Non-\r\nresponders'))) +
+  scale_y_continuous(expand = expansion(mult=c(0,0.15)))
+```
+
+```{r}
+roc_density_spatial_v5 <- fig4f %>%  
+  ggplot(aes(x=phenotype_combo, y=AUC, fill=AUC_mode)) +
+  geom_bar(stat='identity',position=position_dodge(), color='black') + theme_bw() + ylab('Area under the ROC curve') + xlab('Spatial relationship') + 
+  geom_errorbar( aes(ymin=low_CI, ymax=high_CI, fill=AUC_mode), 
+                 width=0.1, colour="black", alpha=0.9, size=0.4,
+                 position=position_dodge(.9)) +
+  scale_y_continuous(expand=expansion(mult=c(0,0.01))) +
+  scale_fill_manual(values=c('#A6D854', '#E5C494', '#E78AC3', '#80B1D3')) +
+  geom_hline(yintercept=0.5, color='black', alpha=0.8, linetype='longdash') + theme(legend.title = element_blank()) +
+  theme(legend.text = element_text(size=12)) +
+  xlab('Predictors used in Logistic regression')
+
+DEVIANCE_cd8_plot_v2 <- fig4g  %>%
+    filter(phenotype_combo == 'CD8 T-cell to Cancer cell') %>% 
+  ggplot(aes(x=type_model, y=AIC)) +
+  geom_boxplot() + 
+  geom_point(size=0.5) + 
+  # geom_line(aes(group=phenotype_combo, color=phenotype_combo)) + 
+  theme_bw() +
+  
+  # stat_compare_means(size=2.5) + 
+  xlab('Type of model: response ~ predictor') + 
+  facet_wrap(~phenotype_combo, scales='free_y') +
+  theme(legend.position='none') + 
+  stat_compare_means(comparisons=list(c('a','aucobs_25'), c('b','aucobs_25')), method='t.test') +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
+  ggtitle('variance obtained by LOO') + ylab('Logit deviance') +
+  xlab('Predictor used in Logit model for ICI response') +
+  scale_x_discrete(labels= c('Shape','Scale','G-function\n25 microns', 'G-function\n50 microns','G-function\n100 microns'))
+```
+
+```{r, fig.width=12, fig.height=10}
+patch_v2  / (median_distances_response_boxplot_v2) / (
+  (roc_density_spatial_v5 + DEVIANCE_cd8_plot_v2 + plot_layout(widths = c(1.5, 1)))) +
+    plot_annotation(tag_levels = 'A') +
+  plot_layout(heights = c(2, 1.5, 2), nrow=3)  & theme( axis.title.x  = element_text(size=11), axis.title.y  = element_text(size=11), plot.title = element_text(hjust = 0.5,
+                                                                                                                                                        size=11))  
+```
+
+      
+
+
+# Figure 5
+
+```{r}
+fig5a <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig5a_imcision.xlsx')
+fig5a_nab <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig5a_nabucco.xlsx')
+fig5b <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig5b.xlsx')
+fig5c <- readxl::read_xlsx('~/nabucco_spatial_manuscript/data/sourcedata_individual_files/fig5c.xlsx')
+```
+
+
+
+
+```{r}
+params_plot_imcision <- fig5b %>% 
+  ggplot() +
+  geom_point_rast(aes(x=a, y=b, color=`Phenotype FROM:`), alpha=0.5, size=0.5) +
+  geom_point(aes(x=mean_a,y=mean_b, fill=`Phenotype FROM:`), color='black', size=2, shape=21, stat='unique') +
+  # geom_density_2d() +
+  theme_bw() + scale_y_log10() +
+  xlab('Shape') + ylab('Scale') + facet_wrap(~phenotype_to,nrow=2) + scale_color_brewer(palette='Set2') +
+  scale_fill_brewer(palette='Set2')+
+  theme(legend.position='bottom') +  guides(colour = guide_legend(nrow = 1))
+```
+
+```{r}
+plot_im <- fig5a %>% mutate(cohort='IMCISION') %>%
+  bind_rows(fig5a_nab %>% mutate(cohort='NABUCCO') %>% 
+  mutate(a=`a (shape)`, b=`b (scale)`)) %>% 
+              ggplot() +
+    # geom_line(aes(x=mean_a, y=mean_b, group=paired, color=`Phenotype FROM:`), alpha=1, size=2) + 
+  # geom_point(aes(x=mean_a,y=mean_b, fill=`Phenotype FROM:`, shape=cohort), color='black', size=2,stat='unique', alpha=0.5) +
+geom_point(aes(x=a, y=b), size=0.4) +  theme_bw() + scale_y_log10(limits = c(7, 399.5)) + scale_x_continuous(limits=c(0.7, 6.5)) + 
+  xlab('Shape') + ylab('Scale') + 
+  # facet_wrap(~phenotype_to,nrow=1) + 
+  scale_color_brewer(palette='Set2') +
+  scale_fill_brewer(palette='Set2')+
+    geom_vline(xintercept=4, color='red', alpha=0.5) + geom_hline(yintercept=30, color='red', alpha=0.5) + 
+  theme(legend.position='bottom') +  guides(colour = guide_legend(nrow = 1)) +
+  scale_shape_manual(values=c(21,22)) +  facet_wrap(~cohort)
+
+```
+
+
+```{r}
+biomarkers_imcision <- fig5c %>% ggplot(aes(x=Path_response, y=median, fill=Path_response)) +
+  geom_boxplot(width=0.4) + 
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=0.4,fill='black',
+                                                       colour="black",pch=1)+ 
+  facet_wrap(~phenotype_combo, scales='free_y', nrow=1) +
+  theme_bw() + 
+  xlab('') + ylab('Median 1-NN distance') + scale_fill_manual(values=c("#D55E00", "#56B4E9")) +
+  theme(legend.position='none') + stat_compare_means(method='wilcox.test', comparisons=list(c('Responders','Non\r\nresponders'))) +
+  scale_y_continuous(expand = expansion(mult=c(0,0.15)))
+```
+
+```{r, fig.width=12, fig.height=6, warning=FALSE}
+( params_plot_imcision + theme(legend.position = 'none') ) / (plot_im + biomarkers_imcision +
+                                                                plot_layout(widths=c(1.3,1))) + plot_annotation(tag_levels = 'A') +
+  plot_layout(heights=c(1.7,1))
+```
+
+
