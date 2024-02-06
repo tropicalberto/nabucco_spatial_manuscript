@@ -8,10 +8,8 @@
 #' 
 #' Output is saved as a tab-delimited file (specified by output_file)
 #'
-#' @param spatial_data input spatial dataset, with at least columns: 
-#'        "sample_id', "analysisregion", "Xcenter", "Ycenter", "phenotype"
-#' @param spatial_areas input tissue areas for each sample with at least columns: 
-#'        "sample_id', "Total.Area"
+#' @param output_step_1 output from 1__get1NNdistances.R, with at least columns: 
+#'        "sample_id', "N.per.mm2.scaled", "WinMean", "phenotype_combo"
 #' @param output_file output file name 
 #' @examples
 #' # Example code
